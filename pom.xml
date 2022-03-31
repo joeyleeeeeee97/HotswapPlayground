@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>HotswapPlayground</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.7</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <configuration>
+                            <tasks>
+                                <property name="build.compiler" value="extJavac"/>
+
+                                <!-- compile src/main/java-extra into target/extra -->
+                                <mkdir dir="target/extra"/>
+                                <javac srcdir="src/main/java-extra" destdir="target/extra"/>
+                                <!--compile extra to backup to return previous state during tests -->
+                                <mkdir dir="target/extraBackup"/>
+                                <javac srcdir="src/main/java-extra" destdir="target/extraBackup"/>
+
+
+                                <!-- compile src/main/java-extra into target/extra -->
+                                <mkdir dir="target/hotswap"/>
+                                <javac srcdir="src/main/java-hotswap" destdir="target/hotswap"/>
+
+
+                                <!-- copy src/main/resources-extra into target/extra -->
+                                <copy todir="target/extra">
+                                    <fileset dir="src/main/resources-extra"/>
+                                </copy>
+
+                                <!-- copy src/main/resources-watch into target/watch -->
+                                <mkdir dir="target/watch"/>
+                                <copy todir="target/watch">
+                                    <fileset dir="src/main/resources-watch"/>
+                                </copy>
+
+                            </tasks>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
