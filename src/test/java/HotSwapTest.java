@@ -1,29 +1,56 @@
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
+import java.util.concurrent.ThreadFactory;
+
+/**
+ * +---------------------------+---------+
+ * | feature                   | checked |
+ * +---------------------------+---------+
+ * | method - body change      | ✔️       |
+ * +---------------------------+---------+
+ * | method - add/delete       | ✔️       |
+ * +---------------------------+---------+
+ * | field  - add/delete       | ✔️       |
+ * +---------------------------+---------+
+ * | field  - change static    | ✔️       |
+ * +---------------------------+---------+
+ * | annota - change           | ✔️       |
+ * +---------------------------+---------+
+ * | class  - add interface    | ✔️       |
+ * +---------------------------+---------+
+ * | class  - change hierarchy | ✔️       |
+ * +---------------------------+---------+
+ */
 
 public class HotSwapTest {
 
     public static void main(String[] args) throws Exception {
-
         /**
          * works for all vms
          */
-
-//        extraClassPathPrecede();
-//        changeMethodBody();
-//        checkAnnotations(HelloWorldHotswap.class);
+        extraClassPathPrecede();
+        methodChangeBody();
+        annotationsChange();
 
         /**
-         * Only dcevm
+         * Only dcevm full
+         * full patches support full redefenition capabilities (including removal of superclasses, for example).
+         * light patches are easier to maintain, but they only support limited functionality
+         * (generally, additions to class hierarchies are fine, removals are not).
          */
+        methodAddAndDelete();
+        methodChangeParameterAndReturnValue();
+        fieldAddAndDelete();
+        fieldStaticAdd();
+        // only full patch support this
+//        hierarchyChange();
 
-        addAndDeleteMethod();
-        changeMethodParameterAndReturnValue();
     }
 
     private static void extraClassPathPrecede() throws Exception {
@@ -31,7 +58,7 @@ public class HotSwapTest {
         always(HelloWorldHotswap.hello().equals("Hello World Extra"), "extra classpath precede");
     }
 
-    private static void changeMethodBody() throws Exception {
+    private static void methodChangeBody() throws Exception {
         boolean usingExtraVersion = true;
         for (int i = 0; i < 4; i++) {
             copyClassFile("HelloWorldHotswap", usingExtraVersion);
@@ -48,8 +75,10 @@ public class HotSwapTest {
         }
     }
 
-    private static void changeMethodParameterAndReturnValue() throws Exception {
+    private static void methodChangeParameterAndReturnValue() throws Exception {
         copyClassFile("HelloWorldHotswap", true);
+        sleep();
+
         String parm1 = "hello";
         HelloWorldHotswap obj = new HelloWorldHotswap();
         Method originM = HelloWorldHotswap.class.getDeclaredMethod("toBeModified", String.class);
@@ -60,15 +89,17 @@ public class HotSwapTest {
 
         copyClassFile("HelloWorldHotswap", false);
         sleep();
-        Method newM = HelloWorldHotswap.class.getDeclaredMethod("toBeModified", String.class);
+        Method newM = HelloWorldHotswap.class.getDeclaredMethod("toBeModified", Object.class);
         newM.setAccessible(true);
-        ret = newM.invoke(obj, parm1);
+        ret = newM.invoke(obj, ret);
         always(ret instanceof Boolean, "why not");
-
+        always(ret == Boolean.TRUE, "must contains !");
     }
 
-    private static void addAndDeleteMethod() throws Exception {
+    private static void methodAddAndDelete() throws Exception {
         copyClassFile("HelloWorldHotswap", true);
+        sleep();
+
         HelloWorldHotswap obj = new HelloWorldHotswap();
         Method tobeDeleted = HelloWorldHotswap.class.getDeclaredMethod("toBeDeleted");
         tobeDeleted.setAccessible(true);
@@ -99,9 +130,56 @@ public class HotSwapTest {
 
     }
 
+    private static void fieldAddAndDelete() throws Exception {
+        copyClassFile("HelloWorldHotswap", true);
+        sleep();
+
+        HelloWorldHotswap helloWorldHotswap = new HelloWorldHotswap();
+        Field tobeDeleted = HelloWorldHotswap.class.getDeclaredField("toBeDeleted");
+        Object f =  tobeDeleted.get(helloWorldHotswap);
+        always(f instanceof String, "field type");
+        never(Objects.isNull(f), "null initial value");
+
+        copyClassFile("HelloWorldHotswap", false);
+        sleep();
+
+        Field tobeAdded = HelloWorldHotswap.class.getDeclaredField("toBeAdded");
+        f = tobeAdded.get(helloWorldHotswap); // old obj
+        always(f == null, "empty for old obj");
+        f = tobeAdded.get(new HelloWorldHotswap());
+        always(f instanceof Integer, "field type");
+        always(43 == (Integer) f, "43 initial value");
+    }
+
+    private static void fieldStaticAdd() throws Exception {
+        copyClassFile("HelloWorldHotswap", false);
+        sleep();
+
+        HelloWorldHotswap helloWorldHotswap = new HelloWorldHotswap();
+        Field staticAdded = HelloWorldHotswap.class.getDeclaredField("staticAdded");
+        always(staticAdded.get(null).equals("helloStatic"), "static injected");
+    }
+
+    private static void hierarchyChange() throws Exception {
+        copyClassFile("HelloWorldHotswap", true);
+        sleep();
+        HelloWorldHotswap oldHello = new HelloWorldHotswap();
+        always(Thread.class.isAssignableFrom(oldHello.getClass()), "thread Hierarchy");
+
+        copyClassFile("HelloWorldHotswap", false);
+        sleep();
+
+        HelloWorldHotswap newHello = new HelloWorldHotswap();
+        always(Thread.class.isAssignableFrom(oldHello.getClass()), "thread Hierarchy changed");
+        always(ThreadFactory.class.isAssignableFrom(newHello.getClass()), "factory now");
+        ThreadFactory factory = (ThreadFactory) newHello;
+        always(factory.newThread(null) == null, "null impl");
+
+    }
 
     // annotation updated
-    private static void checkAnnotations(Class clazz) throws Exception {
+    private static void annotationsChange() throws Exception {
+        Class clazz = HelloWorldHotswap.class;
         HelloAnnotation clazzAnnotation = (HelloAnnotation) clazz.getAnnotation(HelloAnnotation.class);
         if (clazzAnnotation != null) // clazzAnnotation is not available for anonymous inner class
             always(Objects.equals(clazzAnnotation.value(), "hello hotswap"), "hello hotswap");
@@ -113,7 +191,6 @@ public class HotSwapTest {
         always(Objects.equals(paramAnnotation.value(), "par hotswap"), "par hotswap");
 
     }
-
 
     private static void copyClassFile(String name, boolean usingExtraVersion) throws IOException {
         String fileName = name.replace(".", "/") + ".class";

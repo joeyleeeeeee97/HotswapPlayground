@@ -4,7 +4,9 @@
  * Hello world class to be replaced by hotswap.
  */
 @HelloAnnotation("hello extra")
-public class HelloWorldHotswap {
+public class HelloWorldHotswap extends Thread {
+    public String toBeDeleted = "123";
+
     public static String hello() {
         return "Hello World Extra";
     }

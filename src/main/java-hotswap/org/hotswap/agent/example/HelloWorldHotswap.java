@@ -1,12 +1,18 @@
 
 
+import java.io.Serializable;
 import java.lang.Cloneable;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * Hello world class.
  */
 @HelloAnnotation("hello hotswap")
-public class HelloWorldHotswap {
+public class HelloWorldHotswap extends Thread {
+    public Integer toBeAdded  = 43;
+
+    public static String staticAdded = "helloStatic";
+
     public static String hello() {
         return "Hello World Hotswap";
     }
@@ -35,4 +41,9 @@ public class HelloWorldHotswap {
     public Boolean toBeModified(Object input) {
         return ((String) input).contains("!");
     }
+//
+//    @Override
+//    public Thread newThread(Runnable r) {
+//        return null;
+//    }
 }
